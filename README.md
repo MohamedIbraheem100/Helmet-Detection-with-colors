@@ -46,7 +46,7 @@ streamlit run app.py
 
 The app will open in your browser at `http://localhost:####`
 demo of UI
-![UI](E:\petroChoise\Task\Helmet-Detection-with-colors\images\demoUI.png)
+![UI](images\demoUI.png)
 
 ---
 
