@@ -7,7 +7,7 @@ from ultralytics import YOLO
 from collections import Counter
 import os
 from sklearn.cluster import KMeans
-
+import tempfile
 
 # ===============================
 # PAGE CONFIG
@@ -55,7 +55,7 @@ st.markdown("""
 # ===============================
 # Only load logo if file exists
 try:
-    with open(r"E:\petroChoise\Task\Helmet-Detection-with-colors\logo.png", "rb") as f:
+    with open(r"E:\petroChoise\Task\Helmet-Detection-with-colors\images\logo.png", "rb") as f:
         logo_data = base64.b64encode(f.read()).decode()
     
     st.markdown(f"""
@@ -106,7 +106,7 @@ st.markdown("### Detecting helmets and identifying their colors")
 # BACKGROUND IMAGE
 # ===============================
 try:
-    with open(r"E:\petroChoise\Task\Helmet-Detection-with-colors\Photorealistic_high-quality_construction_area_insi-1776079121348.png", "rb") as f:
+    with open(r"E:\petroChoise\Task\Helmet-Detection-with-colors\images\Photorealistic_high-quality_construction_area_insi-1776079121348.png", "rb") as f:
         img_data = f.read()
     b64_encoded = base64.b64encode(img_data).decode()
     st.markdown(f"""
@@ -125,16 +125,13 @@ except FileNotFoundError:
 # COLOR DETECTION FUNCTIONS
 # ===============================
 def get_dominant_color(image_region, k=3):
-    """
-    Robust dominant color detection using KMeans + HSV filtering.
-    """
-
+    
     if image_region is None or image_region.size == 0:
         return "Unknown", (0, 0, 0)
 
     # 🔹 Step 1: Center crop (focus on helmet)### me7taga tetzbat aw n run model a7sn fel IOU
     h, w = image_region.shape[:2]
-    crop = image_region[int(h*0.2):int(h*0.8), int(w*0.2):int(w*0.8)]
+    crop = image_region[int(h*0.10):int(h*0.40), int(w*0.35):int(w*0.65)]
 
     # 🔹 Step 2: Blur to reduce noise
     crop = cv2.GaussianBlur(crop, (5, 5), 0)
@@ -218,6 +215,13 @@ def detect_helmet_and_color(frame, model):
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
 
+        w = x2 - x1
+        h = y2 - y1
+        ratio = h / max(w, 1)
+
+        if ratio > 0.9:  #filter faces to prevent wrong detection y3m
+            continue
+        
         helmet_region = frame[y1:y2, x1:x2]
 
         if helmet_region.size > 0:
@@ -285,9 +289,9 @@ def load_model():
     try:
         # Try to load from common paths
         model_paths = [
-            "best.pt",
-            "./best.pt",
-            "/home/user/best.pt",
+            "best (4).pt",
+            "./best (4).pt",
+            "/home/user/best (4).pt",
             # Add your actual path here
         ]
         
@@ -296,13 +300,13 @@ def load_model():
                 return YOLO(path)
         
         # If not found, try direct path
-        return YOLO("best.pt")
+        return YOLO("best (4).pt")
     except Exception as e:
         raise e
 
 try:
     model = load_model()
-    # st.success("✅ Model loaded successfully!")
+    st.success("✅ Model loaded successfully!")
 except Exception as e:
     st.error(f"❌ Error loading model: {e}")
     st.error("Make sure 'best.pt' is in the same directory as this script")
@@ -406,12 +410,11 @@ elif st.session_state.mode == "upload":
                 show_result(helmet_detected, helmet_color, confidence)
 
         elif "video" in file_type:
-            st.info("🎬 Processing video...")
-            
+    
             # Save uploaded video temporarily
-            temp_video_path = "/tmp/uploaded_video.mp4"
-            with open(temp_video_path, "wb") as f:
-                f.write(file.read())
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                tmp_file.write(file.getbuffer())
+                temp_video_path = tmp_file.name
             
             # Open video
             cap = cv2.VideoCapture(temp_video_path)
@@ -419,60 +422,102 @@ elif st.session_state.mode == "upload":
             # Video properties
             fps = int(cap.get(cv2.CAP_PROP_FPS))
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+           
+            # Add stop button
+            stop_video = st.button("Stop Video", key="stop_video")
             
-            st.write(f"📊 Video Info: {fps} FPS, {total_frames} frames")
-            
-            # Process video
-            progress_bar = st.progress(0)
             frame_placeholder = st.empty()
-            stats_placeholder = st.empty()
+            result_placeholder_video = st.empty()
+            progress_bar = st.progress(0)
             
             frame_count = 0
-            detections = []
             
-            while cap.isOpened():
+            while cap.isOpened() and not stop_video:
                 ret, frame = cap.read()
                 if not ret:
                     break
                 
-                # Process every 5th frame for speed
-                if frame_count % 5 == 0:
+                # Detect on every frame (or every Nth frame for performance)
+                if frame_count % 8== 0:  # Change to 2 or 3 if too slow
                     helmet_detected, helmet_color, confidence, annotated_frame = detect_helmet_and_color(frame, model)
-                    detections.append((helmet_detected, helmet_color, confidence))
                     
                     # Show current frame
                     annotated_frame_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
                     frame_placeholder.image(annotated_frame_rgb, use_container_width=True)
                     
-                    # Update progress
-                    progress = min(frame_count / total_frames, 1.0)
-                    progress_bar.progress(progress)
+                    # Show result for current frame
+                    with result_placeholder_video.container():
+                        show_result(helmet_detected, helmet_color, confidence)
+                
+                # Update progress
+                progress = min(frame_count / total_frames, 1.0)
+                progress_bar.progress(progress)
                 
                 frame_count += 1
             
-            cap.release()
             progress_bar.progress(1.0)
+            st.success("✅ Video playback complete!")
             
-            # Summary
-            if detections:
-                detected_count = sum(1 for d in detections if d[0])
-                st.success(f"✅ Detection complete!")
+            # # 🔹 FAST PROCESSING MODE (summary)
+            #     progress_bar = st.progress(0)
+            #     frame_placeholder = st.empty()
                 
-                # Statistics
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Frames Processed", len(detections))
-                with col2:
-                    st.metric("Helmets Detected", detected_count)
-                with col3:
-                    st.metric("Detection Rate", f"{(detected_count/len(detections)*100):.1f}%")
+            #     frame_count = 0
+            #     detections = []
                 
-                # Show most common color
-                colors = [d[1] for d in detections if d[0]]
-                if colors:
-                    most_common_color = Counter(colors).most_common(1)[0][0]
-                    st.info(f"🎨 Most common helmet color: **{most_common_color}**")
-                else:
-                    st.warning("⚠️ No helmets detected in this video")
-
+            #     while cap.isOpened():
+            #         ret, frame = cap.read()
+            #         if not ret:
+            #             break
+                    
+            #         # Process every 5th frame for speed
+            #         if frame_count % 5 == 0:
+            #             helmet_detected, helmet_color, confidence, annotated_frame = detect_helmet_and_color(frame, model)
+            #             detections.append((helmet_detected, helmet_color, confidence))
+                        
+            #             # Show current frame
+            #             annotated_frame_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+            #             frame_placeholder.image(annotated_frame_rgb, use_container_width=True)
+                        
+            #             # Update progress
+            #             progress = min(frame_count / total_frames, 1.0)
+            #             progress_bar.progress(progress)
+                    
+            #         frame_count += 1
+                
+            progress_bar.progress(1.0)
+                
+            # # Summary
+            # if detections:
+            #     detected_count = sum(1 for d in detections if d[0])
+            #     st.success(f"✅ Detection complete!")
+                
+            #     # Statistics
+            #     col1, col2, col3 = st.columns(3)
+            #     with col1:
+            #         st.metric("Total Frames Processed", len(detections))
+            #     with col2:
+            #         st.metric("Helmets Detected", detected_count)
+            #     with col3:
+            #         st.metric("Detection Rate", f"{(detected_count/len(detections)*100):.1f}%")
+                
+            #     # Show most common color
+            #     colors = [d[1] for d in detections if d[0]]
+            #     if colors:
+            #         color_counts = Counter(colors)
+            #         st.info("🎨 **Detected Colors:**")
+            #         for color, count in color_counts.most_common():
+            #             st.write(f"   - **{color}**: {count} times ({count/len(colors)*100:.1f}%)")
+            #     else:
+            #         st.warning("⚠️ No helmets detected in this video")
+        
+            cap.release()
+            
+            # Cleanup temp file
+            try:
+                os.unlink(temp_video_path)
+            except:
+                pass
+ 
 st.markdown("---")
+st.markdown("**PETROCHOISE INTEGRATED SERVICES** | Helmet Safety Detection System")
