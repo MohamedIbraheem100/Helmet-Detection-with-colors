@@ -45,10 +45,12 @@ streamlit run app.py
 ```
 
 The app will open in your browser at `http://localhost:####`
-demo of UI
-![UI](images\demoUI.png)
+
 
 ---
+demo of UI
+
+![UI](images\demoUI.png)
 
 ## 📁 Project Structure
 
