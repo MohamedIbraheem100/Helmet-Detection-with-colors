@@ -533,15 +533,17 @@ elif st.session_state.mode == "upload":
                 ret, frame = cap.read()
                 if not ret:
                     break
+                
+                if frame_count % 3== 0:  # Change to 2 or 3 if too slow
 
-                # ── Run detection on every frame ──────────────────────────
-                detections, annotated_frame = detect_helmet_and_color(frame, model)
+                    # ── Run detection on every frame ──────────────────────────
+                    detections, annotated_frame = detect_helmet_and_color(frame, model)
 
-                annotated_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-                frame_placeholder.image(annotated_rgb, use_container_width=True)
+                    annotated_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+                    frame_placeholder.image(annotated_rgb, use_container_width=True)
 
-                with result_placeholder_vid.container():
-                    show_all_results(detections)
+                    with result_placeholder_vid.container():
+                        show_all_results(detections)
 
                 # Update progress bar
                 progress = min(frame_count / max(total_frames, 1), 1.0)
