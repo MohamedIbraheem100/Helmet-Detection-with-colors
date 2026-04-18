@@ -126,16 +126,10 @@ def get_dominant_color(image_region):
 
 ## 🔮 Future works
 
-- [ ] Multiple helmet detection in one frame
 - [ ] Person tracking across video frames
 - [ ] Safety violation alerts
 - [ ] Database logging of detections
 - [ ] Export detection reports
-- [ ] Mobile app version
 
 
-## 👤 Author
-
-mohamed ibrahim - Helmet Detection System  
-For: PETROCHOISE Company 
 

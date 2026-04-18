@@ -108,7 +108,7 @@ st.markdown("### Real-Time Multi-Helmet & Color Detection")
 # BACKGROUND IMAGE
 # ─────────────────────────────────────────────────────────────────────────────
 try:
-    with open(r"E:\petroChoise\Task\Helmet-Detection-with-colors\images\Photorealistic_high-quality_construction_area_insi-1776079121348.png", "rb") as f:
+    with open(r"E:\petroChoise\Task\Helmet-Detection-with-colors\images\Gemini_Generated_Image_qug322qug322qug3.png", "rb") as f:
         img_data = f.read()
     b64_encoded = base64.b64encode(img_data).decode()
     st.markdown(f"""
@@ -129,18 +129,16 @@ except FileNotFoundError:
 # Focuses on the top-center region where the dome of the helmet sits.
 # ─────────────────────────────────────────────────────────────────────────────
 def get_dominant_color(image_region, k=3):
-    """
-    Extracts the dominant color of a helmet crop using KMeans on HSV pixels.
-    Returns (color_name: str, hsv_tuple: tuple).
-    Falls back to 'Unknown' if the region is too small or flat.
-    """
+    
     if image_region is None or image_region.size == 0:
         return "Unknown", (0, 0, 0)
 
-    # Crop to top-center dome area to avoid background / face noise
+    # Crop to middle dome area to avoid background / face noise
     h, w = image_region.shape[:2]
-    crop = image_region[int(h * 0.10):int(h * 0.40),
-                        int(w * 0.35):int(w * 0.65)]
+    crop = image_region[
+    int(h * 0.20):int(h * 0.60),
+    int(w * 0.30):int(w * 0.70)
+]
 
     # Blur to reduce pixel noise before clustering
     crop = cv2.GaussianBlur(crop, (5, 5), 0)
@@ -150,19 +148,29 @@ def get_dominant_color(image_region, k=3):
 
     # Remove low-saturation pixels (gray/white background noise)
     pixels = hsv.reshape(-1, 3)
-    mask   = pixels[:, 1] > 40        # saturation threshold
+    mask = (
+    (pixels[:,1] > 40) &      # enough saturation
+    (pixels[:,2] > 45) &      # not too dark
+    (pixels[:,2] < 245)       # not glare
+        )
     pixels = pixels[mask]
 
     # Fallback: use all pixels if saturation filter removed too many
     if len(pixels) < 50:
         pixels = hsv.reshape(-1, 3)
-
+    
     # KMeans clustering — find the most common color cluster
     kmeans  = KMeans(n_clusters=k, n_init=10, random_state=42)
     kmeans.fit(pixels)
+        
+    counts = np.bincount(kmeans.labels_)
+    centers = kmeans.cluster_centers_
 
-    counts   = np.bincount(kmeans.labels_)
-    dominant = kmeans.cluster_centers_[np.argmax(counts)]
+    scores = []
+    for i, c in enumerate(centers):
+        scores.append(counts[i] * (c[1] + 1))
+
+    dominant = centers[np.argmax(scores)]
     h_val, s_val, v_val = dominant
 
     color_name = classify_color_hsv(h_val, s_val, v_val)
@@ -181,15 +189,24 @@ def classify_color_hsv(h, s, v):
     if v < 50:
         return "Black"
 
+    # -----------------
+    # Low saturation colors
+    # -----------------
     if s < 40:
-        return "White" if v > 200 else "White"
-
+        if v > 190:
+            return "White"
+        elif v > 90:
+            return "White"
+        else:
+            return "Black"
+        
+        
     # Hue bands (OpenCV HSV: H in [0, 179])
     if h < 10 or h > 170:
         return "Red"
-    elif 10 <= h < 25:
+    elif 10 <= h < 20:
         return "Orange"
-    elif 25 <= h < 35:
+    elif 20 <= h < 35:
         return "Yellow"
     elif 35 <= h < 85:
         return "Green"
@@ -223,7 +240,7 @@ HELMET_CLASS_ID    = 0   # "helmet"
 NO_HELMET_CLASS_ID = 1   # "no helmet"
 
 def detect_helmet_and_color(frame, model):
-    results = model(frame, conf=0.5, verbose=False)
+    results = model(frame, conf=0.65, verbose=False)
 
     detections      = []           # collects one dict per detected person
     annotated_frame = frame.copy()
@@ -237,7 +254,7 @@ def detect_helmet_and_color(frame, model):
         "Orange":  (0, 165, 255),
         "White":   (255, 255, 255),
         "Black":   (50, 50, 50),
-        "Gray":    (128, 128, 128),
+        "White":    (255, 255, 255),
         "Unknown": (200, 200, 200),
     }
 
@@ -330,15 +347,7 @@ def detect_helmet_and_color(frame, model):
 #   • Shows "No Detection" card if the list is empty
 # ─────────────────────────────────────────────────────────────────────────────
 def show_all_results(detections):
-    """
-    Renders detection results in Streamlit.
-
-    3 cases:
-      1. Empty list       → grey "No Detection" card
-      2. Only no-helmet   → red cards per person, summary shows 0 helmets
-      3. Mixed / helmets  → green cards with color, red cards for violations
-    """
-
+    
     # ── Case 1: model ran but nothing passed filters ─────────────────────
     # DE tmamm
     if not detections:
@@ -411,8 +420,8 @@ def show_all_results(detections):
 # ─────────────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_model():
-    YOLO_MODEL_PATH = "best (4).pt"  
-    model = YOLO(YOLO_MODEL_PATH)
+    model = "last (1).pt"  
+    model = YOLO(model)
     return model    
 try:
     model = load_model()
@@ -444,7 +453,7 @@ if st.session_state.mode == "camera":
     image_placeholder  = st.empty()
     result_placeholder = st.empty()
 
-    # camera index 0 = default webcam; change to 1 for external camera
+    # camera index 1 = default webcam; change to 0 for external camera
     cap = cv2.VideoCapture(1)
 
     if not cap.isOpened():
@@ -452,6 +461,8 @@ if st.session_state.mode == "camera":
     else:
         while cap.isOpened() and not stop_button:
             ret, frame = cap.read()
+            # frame = cv2.resize(frame, (640, 480))
+
             if not ret:
                 st.error("Failed to grab frame from camera.")
                 break
@@ -533,7 +544,8 @@ elif st.session_state.mode == "upload":
                 ret, frame = cap.read()
                 if not ret:
                     break
-                
+                # frame = cv2.resize(frame, (640, 480))
+
                 if frame_count % 3== 0:  # Change to 2 or 3 if too slow
 
                     # ── Run detection on every frame ──────────────────────────
